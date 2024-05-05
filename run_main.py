@@ -17,7 +17,7 @@ import os
 os.environ['CURL_CA_BUNDLE'] = ''
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:64"
 
-from utils.tools import del_files, EarlyStopping, adjust_learning_rate, vali, load_content
+from utils.tools import del_files, EarlyStopping, adjust_learning_rate, vali, load_content, test
 
 parser = argparse.ArgumentParser(description='Time-LLM')
 
@@ -78,7 +78,7 @@ parser.add_argument('--patch_len', type=int, default=16, help='patch length')
 parser.add_argument('--stride', type=int, default=8, help='stride')
 parser.add_argument('--prompt_domain', type=int, default=0, help='')
 parser.add_argument('--llm_model', type=str, default='LLAMA', help='LLM model') # LLAMA, GPT2, BERT
-parser.add_argument('--llm_dim', type=int, default='4096', help='LLM model dimension')# LLama7b:4096; GPT2-small:768; BERT-base:768
+parser.add_argument('--llm_dim', type=int, default='768', help='LLM model dimension')# LLama7b:4096; GPT2-small:768; BERT-base:768
 
 
 # optimization
@@ -88,7 +88,7 @@ parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
 parser.add_argument('--align_epochs', type=int, default=10, help='alignment epochs')
 parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
 parser.add_argument('--eval_batch_size', type=int, default=8, help='batch size of model evaluation')
-parser.add_argument('--patience', type=int, default=10, help='early stopping patience')
+parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
 parser.add_argument('--learning_rate', type=float, default=0.0001, help='optimizer learning rate')
 parser.add_argument('--des', type=str, default='test', help='exp description')
 parser.add_argument('--loss', type=str, default='MSE', help='loss function')
@@ -166,6 +166,8 @@ for ii in range(args.itr):
 
     train_loader, vali_loader, test_loader, model, model_optim, scheduler = accelerator.prepare(
         train_loader, vali_loader, test_loader, model, model_optim, scheduler)
+
+    accelerator.print(len(train_loader))
 
     if args.use_amp:
         scaler = torch.cuda.amp.GradScaler()
@@ -248,7 +250,20 @@ for ii in range(args.itr):
         early_stopping(vali_loss, model, path)
         if early_stopping.early_stop:
             accelerator.print("Early stopping")
+            f = open("result_long_term_forecast.txt", 'a')
+            f.write(setting + "  \n")
+            f.write('mse:{}, mae:{}'.format(test_loss, test_mae_loss))
+            f.write('\n')
+            f.write('\n')
+            f.close()
             break
+        elif epoch == args.train_epochs - 1:
+            f = open("result_long_term_forecast.txt", 'a')
+            f.write(setting + "  \n")
+            f.write('mse:{}, mae:{}'.format(test_loss, test_mae_loss))
+            f.write('\n')
+            f.write('\n')
+            f.close()
 
         if args.lradj != 'TST':
             if args.lradj == 'COS':
@@ -262,6 +277,8 @@ for ii in range(args.itr):
 
         else:
             accelerator.print('Updating learning rate to {}'.format(scheduler.get_last_lr()[0]))
+
+
 
 accelerator.wait_for_everyone()
 if accelerator.is_local_main_process:
